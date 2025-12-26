@@ -1,4 +1,4 @@
-INTEGER, PLUS, EOF = 'INTEGER', 'PLUS', 'EOF'
+INTEGER, PLUS, MINUS, EOF = 'INTEGER', 'PLUS', 'MINUS', 'EOF'
 
 class Token(object):
     def __init__(self, type, value):
@@ -26,12 +26,22 @@ class Interpreter(object):
             return Token(EOF, None)
 
         current_char = text[self.pos]
-        if current_char.isdigit():
-            token = Token(INTEGER, int(current_char))
+        if current_char == ' ':
             self.pos += 1
+            return self.get_next_token()
+        if current_char.isdigit():
+            start = self.pos
+            while (current_char.isdigit()):
+                self.pos += 1
+                current_char = '' if self.pos == len(text) else text[self.pos]
+            token = Token(INTEGER, int(text[start:self.pos]))
             return token
         if current_char == '+':
             token = Token(PLUS, current_char)
+            self.pos += 1
+            return token
+        if current_char == '-':
+            token = Token(MINUS, current_char)
             self.pos += 1
             return token
         self.error()
@@ -48,13 +58,13 @@ class Interpreter(object):
         self.eat(INTEGER)
 
         op = self.current_token
-        self.eat(PLUS)
+        self.eat(op.type)
 
         right = self.current_token
         self.eat(INTEGER)
 
-        result = left.value + right.value
-        return result
+        ops = {PLUS: lambda a, b: a + b, MINUS: lambda a, b: a - b}
+        return ops[op.type](left.value, right.value)
 
 def main():
     while True:
