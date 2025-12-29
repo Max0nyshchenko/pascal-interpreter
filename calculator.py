@@ -74,30 +74,27 @@ class Interpreter(object):
         else:
             self.error()
 
+    def term(self):
+        token = self.current_token
+        self.eat(INTEGER)
+        return token.value
+
     def expr(self):
         self.current_token = self.get_next_token()
-        left = self.current_token
-        self.eat(INTEGER)
+        result = self.term()
+        ops = {
+            PLUS: lambda a, b: a + b,
+            MINUS: lambda a, b: a - b,
+            MULTIPLICATION: lambda a, b: a * b,
+            DIVISION: lambda a, b: a / b
+        }
 
-        op = self.current_token
-        self.eat(op.type)
+        while self.current_token.type in (PLUS, MINUS, MULTIPLICATION, DIVISION):
+            op = self.current_token.type
+            self.eat(op)
+            result = ops[op](result, self.term())
 
-        right = self.current_token
-        self.eat(INTEGER)
-        ops = {PLUS: lambda a, b: a + b, MINUS: lambda a, b: a - b, MULTIPLICATION: lambda a, b: a * b, DIVISION: lambda a, b: a / b}
-
-        res = ops[op.type](left.value, right.value)
-
-        while (self.current_token.type != EOF):
-            op = self.current_token
-            self.eat(op.type)
-
-            right = self.current_token
-            self.eat(INTEGER)
-
-            res = ops[op.type](res, right.value)
-
-        return res
+        return result
         
 def main():
     while True:
