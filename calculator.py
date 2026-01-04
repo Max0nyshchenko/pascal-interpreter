@@ -79,19 +79,31 @@ class Interpreter(object):
         self.eat(INTEGER)
         return token.value
 
-    def expr(self):
+    def term(self):
         result = self.factor()
         ops = {
-            PLUS: lambda a, b: a + b,
-            MINUS: lambda a, b: a - b,
             MUL: lambda a, b: a * b,
             DIV: lambda a, b: a / b
         }
 
-        while self.current_token.type in (PLUS, MINUS, MUL, DIV):
+        while self.current_token.type in (MUL, DIV):
             op = self.current_token.type
             self.eat(op)
             result = ops[op](result, self.factor())
+
+        return result
+
+    def expr(self):
+        result = self.term()
+        ops = {
+            PLUS: lambda a, b: a + b,
+            MINUS: lambda a, b: a - b,
+        }
+
+        while self.current_token.type in (PLUS, MINUS):
+            op = self.current_token.type
+            self.eat(op)
+            result = ops[op](result, self.term())
 
         return result
         
