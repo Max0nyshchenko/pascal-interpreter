@@ -13,23 +13,23 @@ tokenize (c:cs)
                 in Num (read num) : tokenize rest
   | otherwise = tokenize cs
 
-eval :: [Token] -> Maybe Float
-eval [] = Nothing
-eval (Num n:rest) = Just $ foldl apply n (pairs rest)
+expr :: [Token] -> Maybe Float
+expr [] = Nothing
+expr tokens = Just $ sumUp $ mulDiv tokens []
   where
-    pairs (Op op : Num val : ts) = (op, val) : pairs ts
-    pairs _ = []
-    apply acc ('+', val) = acc + val
-    apply acc ('-', val) = acc - val
-    apply acc ('*', val) = acc * val
-    apply acc ('/', val) = acc / val
-    apply acc _ = acc
-eval _ = Nothing
+    mulDiv (Num x: Op '*' : Num y : rest) acc = mulDiv (Num (x * y) : rest) acc
+    mulDiv (Num x: Op '/' : Num y : rest) acc = mulDiv (Num (x / y) : rest) acc
+    mulDiv (x:rest) acc = mulDiv rest (acc ++ [x])
+    mulDiv [] acc = acc
+    sumUp (Num x : Op '+' : Num y : rest) = sumUp (Num (x + y) : rest)
+    sumUp (Num x : Op '-' : Num y : rest) = sumUp (Num (x - y) : rest)
+    sumUp [Num x] = x
+    sumUp _ = 0
 
 main :: IO ()
 main = forever $ do
   putStr "calc> " >> hFlush stdout
   input <- getLine
-  case eval (tokenize input) of
+  case expr (tokenize input) of
     Nothing -> putStrLn "Error: Invalid expression"
     Just result -> print result
