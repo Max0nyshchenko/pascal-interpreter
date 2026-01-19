@@ -1,24 +1,39 @@
-INTEGER, PLUS, MINUS, MUL, DIV, EOF = 'INTEGER', 'PLUS', 'MINUS', 'MUL', 'DIV', 'EOF'
+from typing import Union
+
+INTEGER, PLUS, MINUS, MUL, DIV, PAR_OPEN, PAR_CLOSED, EOF = (
+    "INTEGER",
+    "PLUS",
+    "MINUS",
+    "MUL",
+    "DIV",
+    "PAR_OPEN",
+    "PAR_CLOSED",
+    "EOF",
+)
+
 
 class Token(object):
     def __init__(self, type, value):
+        # type: (str, Union[int, str, None]) -> None
         self.type = type
         self.value = value
 
     def __str__(self):
-        return 'Token({type}, {value})'.format(type=self.type, value=repr(self.value))
+        return "Token({type}, {value})".format(type=self.type, value=repr(self.value))
 
     def __repr__(self):
         return self.__str__()
 
+
 class Lexer(object):
     def __init__(self, text):
+        # type: (str) -> None
         self.text = text
         self.pos = 0
         self.current_char = self.text[self.pos]
 
     def error(self):
-        raise Exception('Invalid character')
+        raise Exception("Invalid character")
 
     def advance(self):
         self.pos += 1
@@ -32,7 +47,7 @@ class Lexer(object):
             self.advance()
 
     def integer(self):
-        result = ''
+        result = ""
         while self.current_char is not None and self.current_char.isdigit():
             result += self.current_char
             self.advance()
@@ -43,32 +58,50 @@ class Lexer(object):
             if self.current_char.isspace():
                 self.skip_whitespace()
                 continue
+
             if self.current_char.isdigit():
                 return Token(INTEGER, self.integer())
-            if self.current_char == '*':
+
+            if self.current_char == "(":
                 self.advance()
-                return Token(MUL, '*')
-            if self.current_char == '/':
+                return Token(PAR_OPEN, "(")
+
+            if self.current_char == ")":
                 self.advance()
-                return Token(DIV, '/')
-            if self.current_char == '+':
+                return Token(PAR_CLOSED, ")")
+
+            if self.current_char == "*":
                 self.advance()
-                return Token(PLUS, '+')
-            if self.current_char == '-':
+                return Token(MUL, "*")
+
+            if self.current_char == "/":
                 self.advance()
-                return Token(MINUS, '-')
+                return Token(DIV, "/")
+
+            if self.current_char == "+":
+                self.advance()
+                return Token(PLUS, "+")
+
+            if self.current_char == "-":
+                self.advance()
+                return Token(MINUS, "-")
+
             self.error()
+
         return Token(EOF, None)
+
 
 class Interpreter(object):
     def __init__(self, lexer):
+        # type: (Lexer) -> None
         self.lexer = lexer
         self.current_token = self.lexer.get_next_token()
 
     def error(self):
-        raise Exception('Invalid syntax')
+        raise Exception("Invalid syntax")
 
     def eat(self, token_type):
+        # type: (str) -> None
         if self.current_token.type == token_type:
             self.current_token = self.lexer.get_next_token()
         else:
@@ -79,21 +112,35 @@ class Interpreter(object):
         self.eat(INTEGER)
         return token.value
 
+    def par(self):
+        # type: () -> Union[int, str, None]
+        if self.current_token.type != PAR_OPEN:
+            return self.factor()
+
+        self.eat(PAR_OPEN)
+        result = None
+
+        while self.current_token.type != PAR_CLOSED:
+            result = self.expr()
+
+        self.eat(PAR_CLOSED)
+
+        return result if result is not None else self.factor()
+
     def term(self):
-        result = self.factor()
-        ops = {
-            MUL: lambda a, b: a * b,
-            DIV: lambda a, b: a / b
-        }
+        # type: () -> Union[int, str, None]
+        result = self.par()
+        ops = {MUL: lambda a, b: a * b, DIV: lambda a, b: a / b}
 
         while self.current_token.type in (MUL, DIV):
             op = self.current_token.type
             self.eat(op)
-            result = ops[op](result, self.factor())
+            result = ops[op](result, self.par())
 
         return result
 
     def expr(self):
+        # type: () -> Union[int, str, None]
         result = self.term()
         ops = {
             PLUS: lambda a, b: a + b,
@@ -106,11 +153,12 @@ class Interpreter(object):
             result = ops[op](result, self.term())
 
         return result
-        
+
+
 def main():
     while True:
         try:
-            text = raw_input('calc> ')
+            text = raw_input("calc> ")
         except EOFError:
             break
         if not text:
@@ -120,6 +168,6 @@ def main():
         result = interpreter.expr()
         print(result)
 
-if __name__ == '__main__':
-    main()
 
+if __name__ == "__main__":
+    main()
