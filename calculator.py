@@ -1,13 +1,13 @@
 from typing import Union
 
-INTEGER, PLUS, MINUS, MUL, DIV, PAR_OPEN, PAR_CLOSED, EOF = (
+INTEGER, PLUS, MINUS, MUL, DIV, LPAREN, RPAREN, EOF = (
     "INTEGER",
     "PLUS",
     "MINUS",
     "MUL",
     "DIV",
-    "PAR_OPEN",
-    "PAR_CLOSED",
+    "(",
+    ")",
     "EOF",
 )
 
@@ -64,11 +64,11 @@ class Lexer(object):
 
             if self.current_char == "(":
                 self.advance()
-                return Token(PAR_OPEN, "(")
+                return Token(LPAREN, "(")
 
             if self.current_char == ")":
                 self.advance()
-                return Token(PAR_CLOSED, ")")
+                return Token(RPAREN, ")")
 
             if self.current_char == "*":
                 self.advance()
@@ -109,33 +109,25 @@ class Interpreter(object):
 
     def factor(self):
         token = self.current_token
+
+        if token.type == LPAREN:
+            self.eat(LPAREN)
+            result = self.expr()
+            self.eat(RPAREN)
+            return result
+
         self.eat(INTEGER)
         return token.value
 
-    def par(self):
-        # type: () -> Union[int, str, None]
-        if self.current_token.type != PAR_OPEN:
-            return self.factor()
-
-        self.eat(PAR_OPEN)
-        result = None
-
-        while self.current_token.type != PAR_CLOSED:
-            result = self.expr()
-
-        self.eat(PAR_CLOSED)
-
-        return result if result is not None else self.factor()
-
     def term(self):
         # type: () -> Union[int, str, None]
-        result = self.par()
+        result = self.factor()
         ops = {MUL: lambda a, b: a * b, DIV: lambda a, b: a / b}
 
         while self.current_token.type in (MUL, DIV):
             op = self.current_token.type
             self.eat(op)
-            result = ops[op](result, self.par())
+            result = ops[op](result, self.factor())
 
         return result
 
