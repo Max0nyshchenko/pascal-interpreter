@@ -21,31 +21,25 @@ int tokens_len = 0;
 int tok_i = 0;
 
 void tokenize() {
-  int i = 0;
-  int t_i = 0;
-  int len = strlen(input);
-  while (i < len) {
-    char c = input[i];
-
-    if (c == '(') {
-      tokens[t_i++].type = ParOpen;
-    } else if (c == ')') {
-      tokens[t_i++].type = ParClose;
-    } else if (strchr("*/-+", c)) {
-      tokens[t_i++] = (Token){.type = Op, .op = c};
-    } else if (isdigit(c)) {
-      char *ptr = &input[i];
-      float num = strtof(&input[i], &ptr);
-      i += ptr - &input[i];
-      tokens[t_i++] = (Token){.type = Num, .num = num};
+  memset(tokens, 0, sizeof(tokens));
+  tokens_len = 0;
+  tok_i = 0;
+  int n;
+  for (char *p = input; *p; p += n) {
+    if (isspace(*p)) {
+      n = 1;
       continue;
     }
 
-    i++;
+    if (isdigit(*p)) {
+      tokens[tokens_len++] = (Token){.type = Num, .num = strtof(p, &p)};
+      n = 0;
+    } else {
+      TokenType type = (*p == '(') ? ParOpen : (*p == ')') ? ParClose : Op;
+      tokens[tokens_len++] = (Token){type, .op = *p};
+      n = 1;
+    }
   }
-
-  tokens_len = t_i;
-  tok_i = 0;
 }
 
 Token get_curr_tok() { return tokens[tok_i]; }
@@ -60,8 +54,7 @@ float factor() {
   if (tok.type == ParOpen) {
     advance();
     float left = expr();
-    advance();
-    return left;
+    return advance(), left;
   }
 
   exit(1);
@@ -69,17 +62,12 @@ float factor() {
 
 float term() {
   float left = factor();
+  Token tok;
 
-  Token tok = get_curr_tok();
-  while (tok.type == Op && strchr("*/", tok.op)) {
+  while (tok = get_curr_tok(), tok.type == Op && strchr("*/", tok.op)) {
     advance();
     float right = term();
-    if (tok.op == '*') {
-      left *= right;
-    } else {
-      left /= right;
-    }
-    tok = get_curr_tok();
+    left = tok.op == '*' ? left * right : left / right;
   }
 
   return left;
@@ -87,17 +75,12 @@ float term() {
 
 float expr() {
   float left = term();
+  Token tok;
 
-  Token tok = get_curr_tok();
-  while (tok.type == Op && strchr("+-", tok.op)) {
+  while (tok = get_curr_tok(), tok.type == Op && strchr("+-", tok.op)) {
     advance();
     float right = term();
-    if (tok.op == '+') {
-      left += right;
-    } else {
-      left -= right;
-    }
-    tok = get_curr_tok();
+    left = tok.op == '+' ? left + right : left - right;
   }
 
   return left;
