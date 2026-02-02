@@ -14,7 +14,7 @@ INTEGER, PLUS, MINUS, MUL, DIV, LPAREN, RPAREN, EOF = (
 
 class Token(object):
     def __init__(self, type, value):
-        # type: (str, Union[int, str, None]) -> None
+        # type: (str, Union[float, str, None]) -> None
         self.type = type
         self.value = value
 
@@ -23,6 +23,25 @@ class Token(object):
 
     def __repr__(self):
         return self.__str__()
+
+
+class AST(object):
+    pass
+
+
+class Num(AST):
+    def __init__(self, token):
+        # type: (Token) -> None
+        self.token = token
+        self.value = token.value
+
+
+class BinOp(AST):
+    def __init__(self, left, op, right):
+        # type: (Union[BinOp, Num], Token, Union[BinOp, Num]) -> None
+        self.left = left
+        self.token = self.op = op
+        self.right = right
 
 
 class Lexer(object):
@@ -91,7 +110,7 @@ class Lexer(object):
         return Token(EOF, None)
 
 
-class Interpreter(object):
+class Parser(object):
     def __init__(self, lexer):
         # type: (Lexer) -> None
         self.lexer = lexer
@@ -117,34 +136,73 @@ class Interpreter(object):
             return result
 
         self.eat(INTEGER)
-        return token.value
+        return Num(token)
 
     def term(self):
-        # type: () -> Union[int, str, None]
-        result = self.factor()
-        ops = {MUL: lambda a, b: a * b, DIV: lambda a, b: a / b}
+        # type: () -> Union[BinOp, Num]
+        left = self.factor()
 
         while self.current_token.type in (MUL, DIV):
-            op = self.current_token.type
-            self.eat(op)
-            result = ops[op](result, self.factor())
+            tok = self.current_token
+            self.eat(self.current_token.type)
+            left = BinOp(left=left, op=tok, right=self.factor())
 
-        return result
+        return left
 
     def expr(self):
-        # type: () -> Union[int, str, None]
-        result = self.term()
-        ops = {
-            PLUS: lambda a, b: a + b,
-            MINUS: lambda a, b: a - b,
-        }
+        # type: () -> Union[BinOp, Num]
+        left = self.term()
 
         while self.current_token.type in (PLUS, MINUS):
-            op = self.current_token.type
-            self.eat(op)
-            result = ops[op](result, self.term())
+            tok = self.current_token
+            self.eat(self.current_token.type)
+            left = BinOp(left=left, op=tok, right=self.term())
 
-        return result
+        return left
+
+    def parse(self):
+        return self.expr()
+
+
+class NodeVisitor(object):
+    def visit(self, node):
+        # type: (Union[BinOp, Num]) -> Union[float, None]
+        method_name = "visit_" + type(node).__name__
+        visitor = getattr(self, method_name, self.generic_visit)
+        return visitor(node)
+
+    def generic_visit(self, node):
+        # type: (Union[BinOp, Num]) -> None
+        raise Exception("No visit_{} method".format(type(node).__name__))
+
+
+class Interpreter(NodeVisitor):
+    def __init__(self, parser):
+        # type: (Parser) -> None
+        self.parser = parser
+
+    def visit_BinOp(self, node):
+        # type: (BinOp) -> Union[float, None]
+        ops = {
+            PLUS: lambda x, y: x + y,
+            MINUS: lambda x, y: x - y,
+            MUL: lambda x, y: x * y,
+            DIV: lambda x, y: x / y,
+        }
+        left = self.visit(node.left)
+        right = self.visit(node.right)
+        if not left or not right:
+            raise Exception("Invalid value")
+
+        return ops[node.op.type](left, right)
+
+    def visit_Num(self, node):
+        # type: (Num) -> Union[float,None]
+        return float(node.value) if node.value else None
+
+    def interpret(self):
+        tree = self.parser.parse()
+        return self.visit(tree)
 
 
 def main():
@@ -156,8 +214,9 @@ def main():
         if not text:
             continue
         lexer = Lexer(text)
-        interpreter = Interpreter(lexer)
-        result = interpreter.expr()
+        parser = Parser(lexer)
+        interpreter = Interpreter(parser)
+        result = interpreter.interpret()
         print(result)
 
 
