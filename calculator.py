@@ -36,9 +36,15 @@ class Num(AST):
         self.value = token.value
 
 
+class UnaryOp(AST):
+    def __init__(self, op, expr):
+        self.token = self.op = op
+        self.expr = expr
+
+
 class BinOp(AST):
     def __init__(self, left, op, right):
-        # type: (Union[BinOp, Num], Token, Union[BinOp, Num]) -> None
+        # type: (Union[UnaryOp, BinOp, Num], Token, Union[UnaryOp, BinOp, Num]) -> None
         self.left = left
         self.token = self.op = op
         self.right = right
@@ -129,7 +135,11 @@ class Parser(object):
     def factor(self):
         token = self.current_token
 
-        if token.type == LPAREN:
+        if token.type in (PLUS, MINUS):
+            self.eat(token.type)
+            node = UnaryOp(token, self.factor())
+            return node
+        elif token.type == LPAREN:
             self.eat(LPAREN)
             result = self.expr()
             self.eat(RPAREN)
@@ -139,7 +149,7 @@ class Parser(object):
         return Num(token)
 
     def term(self):
-        # type: () -> Union[BinOp, Num]
+        # type: () -> Union[UnaryOp, BinOp, Num]
         left = self.factor()
 
         while self.current_token.type in (MUL, DIV):
@@ -150,7 +160,7 @@ class Parser(object):
         return left
 
     def expr(self):
-        # type: () -> Union[BinOp, Num]
+        # type: () -> Union[UnaryOp, BinOp, Num]
         left = self.term()
 
         while self.current_token.type in (PLUS, MINUS):
@@ -166,13 +176,13 @@ class Parser(object):
 
 class NodeVisitor(object):
     def visit(self, node):
-        # type: (Union[BinOp, Num]) -> Union[float, None]
+        # type: (Union[UnaryOp, BinOp, Num]) -> Union[float, None]
         method_name = "visit_" + type(node).__name__
         visitor = getattr(self, method_name, self.generic_visit)
         return visitor(node)
 
     def generic_visit(self, node):
-        # type: (Union[BinOp, Num]) -> None
+        # type: (Union[UnaryOp, BinOp, Num]) -> None
         raise Exception("No visit_{} method".format(type(node).__name__))
 
 
@@ -192,9 +202,16 @@ class Interpreter(NodeVisitor):
         left = self.visit(node.left)
         right = self.visit(node.right)
         if not left or not right:
-            raise Exception("Invalid value")
+            raise Exception("BinOp: Invalid value")
 
         return ops[node.op.type](left, right)
+
+    def visit_UnaryOp(self, node):
+        res = self.visit(node.expr)
+        if not res:
+            raise Exception("UnaryOp: Invalid value")
+
+        return +res if node.op.type == PLUS else -res
 
     def visit_Num(self, node):
         # type: (Num) -> Union[float,None]
