@@ -36,6 +36,9 @@
           haskellPkgs.ghc
           pkgs.cabal-install
           haskellPkgs.haskell-language-server
+
+          # Pascal
+          pkgs.fpc
         ];
 
         shellHook = ''
