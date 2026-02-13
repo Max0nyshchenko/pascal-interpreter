@@ -1,4 +1,4 @@
-""" SPI - Simple Pascal Interpreter. """
+""" SPI - Simple Pascal Interpreter """
 
 ###############################################################################
 #                                                                             #
@@ -31,6 +31,7 @@ PROGRAM       = 'PROGRAM'
 VAR           = 'VAR'
 COLON         = 'COLON'
 COMMA         = 'COMMA'
+PROCEDURE     = 'PROCEDURE'
 EOF           = 'EOF'
 
 
@@ -64,6 +65,7 @@ RESERVED_KEYWORDS = {
     'REAL': Token('REAL', 'REAL'),
     'BEGIN': Token('BEGIN', 'BEGIN'),
     'END': Token('END', 'END'),
+    'PROCEDURE': Token('PROCEDURE', 'PROCEDURE'),
 }
 
 class Lexer(object):
@@ -284,6 +286,12 @@ class Type(AST):
         self.value = token.value
 
 
+class ProcedureDecl(AST):
+    def __init__(self, proc_name, block_node):
+        self.proc_name = proc_name
+        self.block_node = block_node
+
+
 class Parser(object):
     def __init__(self, lexer):
         self.lexer = lexer
@@ -323,15 +331,27 @@ class Parser(object):
 
     def declarations(self):
         """declarations : VAR (variable_declaration SEMI)+
+                        | (PROCEDURE ID SEMI block SEMI)*
                         | empty
         """
         declarations = []
+
         if self.current_token.type == VAR:
             self.eat(VAR)
             while self.current_token.type == ID:
                 var_decl = self.variable_declaration()
                 declarations.extend(var_decl)
                 self.eat(SEMI)
+
+        while self.current_token.type == PROCEDURE:
+            self.eat(PROCEDURE)
+            proc_name = self.current_token.value
+            self.eat(ID)
+            self.eat(SEMI)
+            block_node = self.block()
+            proc_decl = ProcedureDecl(proc_name, block_node)
+            declarations.append(proc_decl)
+            self.eat(SEMI)
 
         return declarations
 
@@ -505,6 +525,7 @@ class Parser(object):
         block : declarations compound_statement
 
         declarations : VAR (variable_declaration SEMI)+
+                     | (PROCEDURE ID SEMI block SEMI)*
                      | empty
 
         variable_declaration : ID (COMMA ID)* COLON type_spec
@@ -671,6 +692,9 @@ class SymbolTableBuilder(NodeVisitor):
         if var_symbol is None:
             raise NameError(repr(var_name))
 
+    def visit_ProcedureDecl(self, node):
+        pass
+
 
 ###############################################################################
 #                                                                             #
@@ -738,6 +762,9 @@ class Interpreter(NodeVisitor):
     def visit_NoOp(self, node):
         pass
 
+    def visit_ProcedureDecl(self, node):
+        pass
+
     def interpret(self):
         tree = self.tree
         if tree is None:
@@ -769,5 +796,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
