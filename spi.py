@@ -655,11 +655,6 @@ class Symbol(object):
         self.name = name
         self.type = type
 
-
-class VarSymbol(Symbol):
-    def __init__(self, name, type):
-        super().__init__(name, type)
-
     def __str__(self):
         return "<{class_name}(name='{name}', type='{type}')>".format(
             class_name=self.__class__.__name__,
@@ -668,6 +663,11 @@ class VarSymbol(Symbol):
         )
 
     __repr__ = __str__
+
+
+class VarSymbol(Symbol):
+    def __init__(self, name, type):
+        super().__init__(name, type)
 
 
 class BuiltinTypeSymbol(Symbol):
@@ -756,7 +756,12 @@ class ScopedSymbolTable(object):
 
 class SemanticAnalyzer(NodeVisitor):
     def __init__(self):
-        self.current_scope = None
+        self.current_scope = ScopedSymbolTable(
+            scope_name='builtins',
+            scope_level=0,
+            enclosing_scope=None
+        )
+        self.current_scope._init_builtins()
 
     def visit_Block(self, node):
         for declaration in node.declarations:
@@ -764,13 +769,15 @@ class SemanticAnalyzer(NodeVisitor):
         self.visit(node.compound_statement)
 
     def visit_Program(self, node):
+        print('OUR program name', node.name)
+        self.current_scope.insert(Symbol(node.name, type='PROG_NAME'));
+        print('builtings scope', self.current_scope)
         print('ENTER scope: global')
         global_scope = ScopedSymbolTable(
             scope_name='global',
             scope_level=1,
-            enclosing_scope=self.current_scope, # None
+            enclosing_scope=self.current_scope, 
         )
-        global_scope._init_builtins()
         self.current_scope = global_scope
 
         # visit subtree
