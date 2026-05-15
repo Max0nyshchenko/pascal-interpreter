@@ -1,17 +1,17 @@
-"""SPI - Simple Pascal Interpreter."""
+"""SPI - Simple Pascal Interpreter. """
 
 import argparse
 import sys
 from enum import Enum
 
 _SHOULD_LOG_SCOPE = False  # see '--scope' command line option
+_SHOULD_LOG_STACK = False  # see '--stack' command line option
 
 
 class ErrorCode(Enum):
     UNEXPECTED_TOKEN = 'Unexpected token'
     ID_NOT_FOUND     = 'Identifier not found'
     DUPLICATE_ID     = 'Duplicate id found'
-    WRONG_ARGS       = 'Wrong number of arguments is passed'
 
 
 class Error(Exception):
@@ -70,7 +70,7 @@ class TokenType(Enum):
     EOF           = 'EOF'
 
 
-class Token(object):
+class Token:
     def __init__(self, type, value, lineno=None, column=None):
         self.type = type
         self.value = value
@@ -127,7 +127,7 @@ def _build_reserved_keywords():
 RESERVED_KEYWORDS = _build_reserved_keywords()
 
 
-class Lexer(object):
+class Lexer:
     def __init__(self, text):
         # client string input, e.g. "4 + 2 * 3 - 6 / 2"
         self.text = text
@@ -286,7 +286,7 @@ class Lexer(object):
 #  PARSER                                                                     #
 #                                                                             #
 ###############################################################################
-class AST(object):
+class AST:
     pass
 
 
@@ -364,9 +364,9 @@ class Param(AST):
 
 
 class ProcedureDecl(AST):
-    def __init__(self, proc_name, params, block_node):
+    def __init__(self, proc_name, formal_params, block_node):
         self.proc_name = proc_name
-        self.params = params  # a list of Param nodes
+        self.formal_params = formal_params  # a list of Param nodes
         self.block_node = block_node
 
 
@@ -375,9 +375,11 @@ class ProcedureCall(AST):
         self.proc_name = proc_name
         self.actual_params = actual_params  # a list of AST nodes
         self.token = token
+        # a reference to procedure declaration symbol
+        self.proc_symbol = None
 
 
-class Parser(object):
+class Parser:
     def __init__(self, lexer):
         self.lexer = lexer
         # set current token to the first token taken from the input
@@ -505,16 +507,16 @@ class Parser(object):
         self.eat(TokenType.PROCEDURE)
         proc_name = self.current_token.value
         self.eat(TokenType.ID)
-        params = []
+        formal_params = []
 
         if self.current_token.type == TokenType.LPAREN:
             self.eat(TokenType.LPAREN)
-            params = self.formal_parameter_list()
+            formal_params = self.formal_parameter_list()
             self.eat(TokenType.RPAREN)
 
         self.eat(TokenType.SEMI)
         block_node = self.block()
-        proc_decl = ProcedureDecl(proc_name, params, block_node)
+        proc_decl = ProcedureDecl(proc_name, formal_params, block_node)
         self.eat(TokenType.SEMI)
         return proc_decl
 
@@ -762,7 +764,7 @@ class Parser(object):
 #                                                                             #
 ###############################################################################
 
-class NodeVisitor(object):
+class NodeVisitor:
     def visit(self, node):
         method_name = 'visit_' + type(node).__name__
         visitor = getattr(self, method_name, self.generic_visit)
@@ -778,7 +780,7 @@ class NodeVisitor(object):
 #                                                                             #
 ###############################################################################
 
-class Symbol(object):
+class Symbol:
     def __init__(self, name, type=None):
         self.name = name
         self.type = type
@@ -813,22 +815,24 @@ class BuiltinTypeSymbol(Symbol):
 
 
 class ProcedureSymbol(Symbol):
-    def __init__(self, name, params=None):
+    def __init__(self, name, formal_params=None):
         super().__init__(name)
-        # a list of formal parameters
-        self.params = params if params is not None else []
+        # a list of VarSymbol objects
+        self.formal_params = [] if formal_params is None else formal_params
+        # a reference to procedure's body (AST sub-tree)
+        self.block_ast = None
 
     def __str__(self):
         return '<{class_name}(name={name}, parameters={params})>'.format(
             class_name=self.__class__.__name__,
             name=self.name,
-            params=self.params,
+            params=self.formal_params,
         )
 
     __repr__ = __str__
 
 
-class ScopedSymbolTable(object):
+class ScopedSymbolTable:
     def __init__(self, scope_name, scope_level, enclosing_scope=None):
         self._symbols = {}
         self.scope_name = scope_name
@@ -950,12 +954,12 @@ class SemanticAnalyzer(NodeVisitor):
         self.current_scope = procedure_scope
 
         # Insert parameters into the procedure scope
-        for param in node.params:
+        for param in node.formal_params:
             param_type = self.current_scope.lookup(param.type_node.value)
             param_name = param.var_node.value
             var_symbol = VarSymbol(param_name, param_type)
             self.current_scope.insert(var_symbol)
-            proc_symbol.params.append(var_symbol)
+            proc_symbol.formal_params.append(var_symbol)
 
         self.visit(node.block_node)
 
@@ -963,6 +967,9 @@ class SemanticAnalyzer(NodeVisitor):
 
         self.current_scope = self.current_scope.enclosing_scope
         self.log(f'LEAVE scope: {proc_name}')
+
+        # accessed by the interpreter when executing procedure call
+        proc_symbol.block_ast = node.block_node
 
     def visit_VarDecl(self, node):
         type_name = node.type_node.value
@@ -1002,13 +1009,12 @@ class SemanticAnalyzer(NodeVisitor):
         pass
 
     def visit_ProcedureCall(self, node):
-        proc_symbol = self.current_scope.lookup(node.proc_name)
-        if proc_symbol is None:
-            self.error(error_code=ErrorCode.ID_NOT_FOUND, token = node.token)
-        if len(proc_symbol.params) != len(node.actual_params):
-            self.error(error_code=ErrorCode.WRONG_ARGS, token = node.token)
         for param_node in node.actual_params:
             self.visit(param_node)
+
+        proc_symbol = self.current_scope.lookup(node.proc_name)
+        # accessed by the interpreter when executing procedure call
+        node.proc_symbol = proc_symbol
 
 
 ###############################################################################
@@ -1017,13 +1023,96 @@ class SemanticAnalyzer(NodeVisitor):
 #                                                                             #
 ###############################################################################
 
+
+class ARType(Enum):
+    PROGRAM   = 'PROGRAM'
+    PROCEDURE = 'PROCEDURE'
+
+
+class CallStack:
+    def __init__(self):
+        self._records = []
+
+    def push(self, ar):
+        self._records.append(ar)
+
+    def pop(self):
+        return self._records.pop()
+
+    def peek(self):
+        return self._records[-1]
+
+    def __str__(self):
+        s = '\n'.join(repr(ar) for ar in reversed(self._records))
+        s = f'CALL STACK\n{s}\n\n'
+        return s
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class ActivationRecord:
+    def __init__(self, name, type, nesting_level):
+        self.name = name
+        self.type = type
+        self.nesting_level = nesting_level
+        self.members = {}
+
+    def __setitem__(self, key, value):
+        self.members[key] = value
+
+    def __getitem__(self, key):
+        return self.members[key]
+
+    def get(self, key):
+        return self.members.get(key)
+
+    def __str__(self):
+        lines = [
+            '{level}: {type} {name}'.format(
+                level=self.nesting_level,
+                type=self.type.value,
+                name=self.name,
+            )
+        ]
+        for name, val in self.members.items():
+            lines.append(f'   {name:<20}: {val}')
+
+        s = '\n'.join(lines)
+        return s
+
+    def __repr__(self):
+        return self.__str__()
+
+
 class Interpreter(NodeVisitor):
     def __init__(self, tree):
         self.tree = tree
-        self.GLOBAL_MEMORY = {}
+        self.call_stack = CallStack()
+
+    def log(self, msg):
+        if _SHOULD_LOG_STACK:
+            print(msg)
 
     def visit_Program(self, node):
+        program_name = node.name
+        self.log(f'ENTER: PROGRAM {program_name}')
+
+        ar = ActivationRecord(
+            name=program_name,
+            type=ARType.PROGRAM,
+            nesting_level=1,
+        )
+        self.call_stack.push(ar)
+
+        self.log(str(self.call_stack))
+
         self.visit(node.block)
+
+        self.log(f'LEAVE: PROGRAM {program_name}')
+        self.log(str(self.call_stack))
+
+        self.call_stack.pop()
 
     def visit_Block(self, node):
         for declaration in node.declarations:
@@ -1067,11 +1156,16 @@ class Interpreter(NodeVisitor):
     def visit_Assign(self, node):
         var_name = node.left.value
         var_value = self.visit(node.right)
-        self.GLOBAL_MEMORY[var_name] = var_value
+
+        ar = self.call_stack.peek()
+        ar[var_name] = var_value
 
     def visit_Var(self, node):
         var_name = node.value
-        var_value = self.GLOBAL_MEMORY.get(var_name)
+
+        ar = self.call_stack.peek()
+        var_value = ar.get(var_name)
+
         return var_value
 
     def visit_NoOp(self, node):
@@ -1081,7 +1175,34 @@ class Interpreter(NodeVisitor):
         pass
 
     def visit_ProcedureCall(self, node):
-        pass
+        proc_name = node.proc_name
+
+        ar = ActivationRecord(
+            name=proc_name,
+            type=ARType.PROCEDURE,
+            nesting_level=2,
+        )
+
+        proc_symbol = node.proc_symbol
+
+        formal_params = proc_symbol.formal_params
+        actual_params = node.actual_params
+
+        for param_symbol, argument_node in zip(formal_params, actual_params):
+            ar[param_symbol.name] = self.visit(argument_node)
+
+        self.call_stack.push(ar)
+
+        self.log(f'ENTER: PROCEDURE {proc_name}')
+        self.log(str(self.call_stack))
+
+        # evaluate procedure body
+        self.visit(proc_symbol.block_ast)
+
+        self.log(f'LEAVE: PROCEDURE {proc_name}')
+        self.log(str(self.call_stack))
+
+        self.call_stack.pop()
 
     def interpret(self):
         tree = self.tree
@@ -1100,9 +1221,15 @@ def main():
         help='Print scope information',
         action='store_true',
     )
+    parser.add_argument(
+        '--stack',
+        help='Print call stack',
+        action='store_true',
+    )
     args = parser.parse_args()
-    global _SHOULD_LOG_SCOPE
-    _SHOULD_LOG_SCOPE = args.scope
+
+    global _SHOULD_LOG_SCOPE, _SHOULD_LOG_STACK
+    _SHOULD_LOG_SCOPE, _SHOULD_LOG_STACK = args.scope, args.stack
 
     text = open(args.inputfile, 'r').read()
 
